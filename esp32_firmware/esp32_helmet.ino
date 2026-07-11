@@ -22,6 +22,17 @@
 
 #include "BluetoothSerial.h"
 #include <Preferences.h>
+#include <DFRobotDFPlayerMini.h>
+
+#define IR_SENSOR_PIN 4
+#define MQ3_SENSOR_PIN 34
+#define RELAY_PIN 5
+#define DF_RX_PIN 18
+#define DF_TX_PIN 19
+#define ALCOHOL_THRESHOLD 2000
+
+DFRobotDFPlayerMini myDFPlayer;
+HardwareSerial dfSerial(2);
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Enable it in "Tools -> Board" menu settings.
@@ -136,13 +147,13 @@ bool isAccidentDetected() {
 }
 
 bool isAlcoholDetected() {
-  // TODO: read MQ-3 analog value, compare to your calibrated threshold
-  return false;
+  int alcoholValue = analogRead(MQ3_SENSOR_PIN);
+  return alcoholValue > ALCOHOL_THRESHOLD;
 }
 
 bool isHelmetWorn() {
-  // TODO: read wear-detection switch/IR sensor
-  return true;
+  // IR sensor logic: typically LOW when object is detected (helmet is worn)
+  return digitalRead(IR_SENSOR_PIN) == LOW;
 }
 
 String getGpsLocationString() {
@@ -157,6 +168,19 @@ void setup() {
   Serial.begin(115200);
   gsmSerial.begin(9600, SERIAL_8N1, GSM_RX_PIN, GSM_TX_PIN);
 
+  pinMode(IR_SENSOR_PIN, INPUT);
+  pinMode(MQ3_SENSOR_PIN, INPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, LOW); // Default off
+
+  dfSerial.begin(9600, SERIAL_8N1, DF_RX_PIN, DF_TX_PIN);
+  if (!myDFPlayer.begin(dfSerial)) {
+    Serial.println("DFPlayer mini failed to initialize.");
+  } else {
+    Serial.println("DFPlayer mini initialized.");
+    myDFPlayer.volume(20);  // Set volume value. From 0 to 30
+  }
+
   SerialBT.begin("SmartHelmet_ESP32"); // Bluetooth device name shown when pairing
   Serial.println("Bluetooth SPP started, pair with 'SmartHelmet_ESP32'");
 
@@ -166,12 +190,27 @@ void setup() {
 void loop() {
   handleBluetoothData();
 
-  if (!isHelmetWorn()) {
-    // e.g. buzz a warning LED/buzzer - rider isn't wearing the helmet
-  }
+  bool helmetWorn = isHelmetWorn();
+  bool alcoholDetected = isAlcoholDetected();
 
-  if (isAlcoholDetected()) {
-    // e.g. disable ignition relay, alert rider
+  // Ignition control logic
+  if (helmetWorn && !alcoholDetected) {
+    digitalWrite(RELAY_PIN, HIGH); // Allow ignition
+  } else {
+    digitalWrite(RELAY_PIN, LOW); // Stop engine
+    
+    // Play voice alerts using DFPlayer (alert every 5 seconds)
+    static unsigned long lastAlertTime = 0;
+    if (millis() - lastAlertTime > 5000) { 
+      if (!helmetWorn) {
+        Serial.println("Helmet not worn! Engine off.");
+        myDFPlayer.play(1); // Assuming track 1 is "Wear Helmet"
+      } else if (alcoholDetected) {
+        Serial.println("Alcohol detected! Engine off.");
+        myDFPlayer.play(2); // Assuming track 2 is "Alcohol Detected"
+      }
+      lastAlertTime = millis();
+    }
   }
 
   if (isAccidentDetected()) {
