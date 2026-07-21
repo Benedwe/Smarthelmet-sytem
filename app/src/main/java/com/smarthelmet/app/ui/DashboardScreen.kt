@@ -81,7 +81,7 @@ fun DashboardScreen(viewModel: ContactsViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 enabled = contacts.isNotEmpty()
             ) {
-                Text("Sync Contacts to Helmet")
+                Text("Sync Contacts to Bike Unit")
             }
 
             Spacer(Modifier.height(8.dp))
@@ -91,7 +91,7 @@ fun DashboardScreen(viewModel: ContactsViewModel) {
 
     if (showDevicePicker) {
         DevicePickerDialog(
-            devices = viewModel.getPairedHelmetCandidates(),
+            devices = viewModel.getPairedBikeUnitCandidates(),
             onDismiss = { showDevicePicker = false },
             onDeviceSelected = { device ->
                 showDevicePicker = false
@@ -133,10 +133,10 @@ private fun DevicePickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Helmet Device") },
+        title = { Text("Select Bike Unit Device") },
         text = {
             if (devices.isEmpty()) {
-                Text("No paired Bluetooth devices found. Pair with your helmet's ESP32 in phone Bluetooth settings first.")
+                Text("No paired Bluetooth devices found. Pair with SmartHelmet_Bike_ESP32 in phone Bluetooth settings first.")
             } else {
                 Column {
                     devices.forEach { device ->
@@ -157,7 +157,7 @@ private fun DevicePickerDialog(
 private fun SyncStatusLabel(status: SyncStatus) {
     val text = when (status) {
         is SyncStatus.Idle -> ""
-        is SyncStatus.Connecting -> "Connecting to helmet..."
+        is SyncStatus.Connecting -> "Connecting to bike unit..."
         is SyncStatus.Sending -> "Sending contacts..."
         is SyncStatus.Success -> "Contacts synced successfully!"
         is SyncStatus.Error -> "Error: ${status.message}"

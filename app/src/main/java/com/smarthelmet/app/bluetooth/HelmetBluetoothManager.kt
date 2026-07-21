@@ -12,12 +12,12 @@ import java.io.OutputStream
 import java.util.UUID
 
 /**
- * Handles a classic Bluetooth SPP connection to the ESP32 on the helmet.
+ * Handles a classic Bluetooth SPP connection to the ESP32 on the bike unit.
  * The ESP32 side should run BluetoothSerial with the same standard SPP UUID.
  *
  * Wire protocol (very simple, line-based, matches ESP32 sketch):
  *   "SYNC:Name1|Phone1;Name2|Phone2;...\n"
- * ESP32 replies with "OK\n" on success.
+ * Bike ESP32 replies with "OK\n" on success.
  */
 class HelmetBluetoothManager(private val context: Context) {
 
@@ -55,12 +55,12 @@ class HelmetBluetoothManager(private val context: Context) {
     }
 
     /**
-     * Sends the full contact list to the helmet so it can store it for SMS alerts.
+     * Sends the full contact list to the bike unit so it can store it for GSM SMS alerts.
      */
     suspend fun syncContacts(contacts: List<Contact>): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val stream = outputStream ?: return@withContext Result.failure(
-                IOException("Not connected to helmet")
+                IOException("Not connected to bike unit")
             )
             val payload = contacts.joinToString(separator = ";") { "${it.name}|${it.phone}" }
             val message = "SYNC:$payload\n"

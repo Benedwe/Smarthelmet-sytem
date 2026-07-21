@@ -40,7 +40,6 @@
         android:extractNativeLibs="false"
         android:label="Smart Helmet"
         android:supportsRtl="true"
-        android:testOnly="true"
         android:theme="@style/Theme.SmartHelmet" >
         <activity
             android:name="com.smarthelmet.app.MainActivity"

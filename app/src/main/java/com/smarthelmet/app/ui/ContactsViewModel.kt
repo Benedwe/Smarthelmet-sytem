@@ -41,7 +41,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { dao.delete(contact) }
     }
 
-    fun getPairedHelmetCandidates(): List<BluetoothDevice> = bluetoothManager.getPairedDevices()
+    fun getPairedBikeUnitCandidates(): List<BluetoothDevice> = bluetoothManager.getPairedDevices()
 
     /** Connects to the chosen paired ESP32 device and pushes the current contact list. */
     fun connectAndSync(device: BluetoothDevice) {
@@ -50,7 +50,7 @@ class ContactsViewModel(application: Application) : AndroidViewModel(application
             val connectResult = bluetoothManager.connect(device)
             if (connectResult.isFailure) {
                 _syncStatus.value = SyncStatus.Error(
-                    connectResult.exceptionOrNull()?.message ?: "Could not connect to helmet"
+                    connectResult.exceptionOrNull()?.message ?: "Could not connect to bike unit"
                 )
                 return@launch
             }
