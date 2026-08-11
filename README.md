@@ -52,27 +52,10 @@ flowchart TD
 
 ## Wireless Behavior
 
-- The Helmet Unit broadcasts helmet-worn and alcohol status to the Bike Unit using ESP-NOW.
-- The Bike Unit enables the relay only when it has received a recent safe status: helmet worn and alcohol not detected.
-- If the wireless status becomes stale, the Bike Unit disables the relay.
-- The Android app syncs emergency contacts directly to `SmartHelmet_Bike_ESP32`, because the GSM module is on the Bike Unit.
-
-## Android App (`app/`)
-
-1. Open this folder in Android Studio.
-2. Let Gradle sync.
-3. Run on a real Android phone. Bluetooth does not work properly on the emulator.
-4. Pair the phone with `SmartHelmet_Bike_ESP32` in Android Bluetooth settings.
-5. Add emergency contacts in the app.
-6. Tap **Sync Contacts to Bike Unit** and select the paired bike ESP32.
-
-The contact sync protocol remains line-based:
-
-```text
-SYNC:Name1|Phone1;Name2|Phone2;...
-```
-
-The Bike Unit replies with `OK` when contacts are saved.
+- The Helmet Unit broadcasts helmet-worn and alcohol status to the Bike Unit using built-in Wi-Fi (ESP-NOW) locked to Wi-Fi Channel 1.
+- The Bike Unit enables the relay only when it receives a fresh safe status: helmet worn and alcohol not detected (1.5s status timeout).
+- If the wireless status becomes stale or is lost, the Bike Unit immediately disables the relay.
+- The Android app syncs emergency contacts directly to `SmartHelmet_Bike_ESP32` via Bluetooth Classic SPP. The Bike Unit parses and saves up to 10 contacts into flash memory and returns `OK` or `ERR:`.
 
 ## Helmet Unit Firmware
 
@@ -89,10 +72,14 @@ Default pins:
 
 The sketch:
 
-- Reads helmet-wear status.
-- Reads MQ-3 alcohol level.
-- Plays DFPlayer warning tracks.
-- Sends status packets to the Bike Unit over ESP-NOW.
+- Configures built-in Wi-Fi on Channel 1 for ESP-NOW.
+- Reads helmet-wear status (IR sensor).
+- Reads MQ-3 alcohol sensor (threshold set to 300).
+- Plays DFPlayer voice alerts:
+  - **Track 1**: "Helmet not worn, please wear your helmet" (plays when helmet is not worn; ignition blocked).
+  - **Track 2**: "Alcohol detected, engine blocked" (plays when alcohol level > 300; ignition blocked).
+- Broadcasts safety status packets to the Bike Unit over ESP-NOW.
+
 
 ## Bike Unit Firmware
 
@@ -109,19 +96,20 @@ Default pins:
 
 The sketch:
 
-- Receives helmet safety status over ESP-NOW.
-- Controls the ignition relay.
-- Detects crash/impact events with MPU6050.
-- Reads GPS NMEA location.
-- Sends SMS alerts through SIM800L.
-- Stores emergency contacts in ESP32 flash.
+- Configures built-in Wi-Fi on Channel 1 for ESP-NOW.
+- Receives helmet safety status over ESP-NOW and controls the ignition relay.
+- Configures MPU6050 to ±8g full scale range (`0x1C` register = `0x10`) for accurate crash/impact detection up to 8g.
+- Reads GPS NMEA location to generate Google Maps position URLs (`https://maps.google.com/?q=lat,lon`).
+- Initializes SIM800L GSM module (auto-baud sync, text mode `AT+CMGF=1`, GSM charset), waits for `>` prompt, and sends SMS alerts with GPS location to all saved contacts when an impact is detected.
+- Stores emergency contacts in ESP32 NVS Flash (`Preferences`).
 
 ## Bench Testing Checklist
 
-- Confirm both ESP32 boards print their ESP-NOW MAC addresses in Serial Monitor.
-- Confirm the Bike Unit relay stays off when the Helmet Unit is powered off.
+- Confirm both ESP32 boards initialize built-in Wi-Fi on Channel 1 and print their ESP-NOW MAC addresses in Serial Monitor.
+- Confirm the Bike Unit relay stays off when the Helmet Unit is powered off or disconnected.
 - Confirm the relay turns on only when the helmet is worn and alcohol is below threshold.
 - Tune `ALCOHOL_THRESHOLD` after MQ-3 warm-up and calibration.
-- Tune `IMPACT_G_THRESHOLD` safely on the bench before real-world use.
-- Power SIM800L from a stable external supply capable of 2A peak current.
-- Test SMS with one contact before adding the full contact list.
+- Verify MPU6050 impact detection trigger threshold (`IMPACT_G_THRESHOLD = 3.5f` on ±8g range).
+- Power SIM800L from a stable external supply capable of 2A peak current (common GND with ESP32).
+- Sync emergency contacts from the Android app and verify `OK` response is received by the app.
+- Test SMS alert delivery with one contact before full deployment.

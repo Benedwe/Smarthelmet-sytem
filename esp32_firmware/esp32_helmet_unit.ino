@@ -3,23 +3,27 @@
   -----------------------------------
   Hardware on this ESP32:
     - IR sensor / switch for helmet-wear detection
-    - MQ-3 alcohol sensor
-    - DFPlayer Mini / SD audio feedback
+    - MQ-3 alcohol sensor (threshold: 300)
+    - DFPlayer Mini / SD audio feedback:
+        - Track 1: "Helmet not worn, please wear your helmet"
+        - Track 2: "Alcohol detected, engine blocked"
 
   Wireless responsibility:
     - Sends helmet-worn and alcohol status to the Bike Unit ESP32 over ESP-NOW.
-    - The Bike Unit controls the ignition relay and owns MPU6050, GPS, and GSM.
+    - The Bike Unit cuts off the ignition relay whenever helmet is not worn OR alcohol > 300.
 */
 
 #include <DFRobotDFPlayerMini.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <esp_now.h>
 
 #define IR_SENSOR_PIN 4
 #define MQ3_SENSOR_PIN 34
 #define DF_RX_PIN 18
 #define DF_TX_PIN 19
-#define ALCOHOL_THRESHOLD 2000
+#define ALCOHOL_THRESHOLD 300
+#define WIFI_CHANNEL 1
 
 static const uint32_t PROTOCOL_MAGIC = 0x53484D54; // "SHMT"
 static const uint8_t PROTOCOL_VERSION = 1;
@@ -47,6 +51,7 @@ unsigned long lastAudioAlertMs = 0;
 bool initEspNow() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  esp_wifi_set_channel(WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
 
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW initialization failed.");
@@ -55,7 +60,7 @@ bool initEspNow() {
 
   esp_now_peer_info_t peerInfo = {};
   memcpy(peerInfo.peer_addr, ESPNOW_BROADCAST_ADDRESS, 6);
-  peerInfo.channel = 0;
+  peerInfo.channel = WIFI_CHANNEL;
   peerInfo.encrypt = false;
   if (!esp_now_is_peer_exist(ESPNOW_BROADCAST_ADDRESS)) {
     esp_err_t addPeerResult = esp_now_add_peer(&peerInfo);
@@ -65,13 +70,12 @@ bool initEspNow() {
     }
   }
 
-  Serial.print("Helmet Unit ESP-NOW MAC: ");
-  Serial.println(WiFi.macAddress());
+  Serial.printf("Helmet Unit ESP-NOW MAC: %s (Channel %d)\n", WiFi.macAddress().c_str(), WIFI_CHANNEL);
   return true;
 }
 
 bool isHelmetWorn() {
-  // Most IR obstacle modules are LOW when an object is detected.
+  // Most IR obstacle modules are LOW when an object is detected (helmet worn).
   return digitalRead(IR_SENSOR_PIN) == LOW;
 }
 
@@ -100,7 +104,7 @@ void sendHelmetStatus(bool helmetWorn, bool alcoholDetected, uint16_t alcoholRaw
   }
 }
 
-void handleAudioAlerts(bool helmetWorn, bool alcoholDetected) {
+void handleAudioAlerts(bool helmetWorn, bool alcoholDetected, uint16_t alcoholRaw) {
   if (helmetWorn && !alcoholDetected) {
     return;
   }
@@ -111,11 +115,11 @@ void handleAudioAlerts(bool helmetWorn, bool alcoholDetected) {
   }
 
   if (!helmetWorn) {
-    Serial.println("Helmet not worn.");
-    dfPlayer.play(1); // Track 1: wear helmet warning.
+    Serial.println("Helmet not worn! Playing voice alert: 'Helmet not worn, please wear your helmet'");
+    dfPlayer.play(1); // Track 1: "Helmet not worn, please wear your helmet"
   } else if (alcoholDetected) {
-    Serial.println("Alcohol detected.");
-    dfPlayer.play(2); // Track 2: alcohol warning.
+    Serial.printf("High alcohol level detected (%u > 300)! Playing voice alert: 'Alcohol detected, engine blocked'\n", alcoholRaw);
+    dfPlayer.play(2); // Track 2: "Alcohol detected, engine blocked"
   }
 
   lastAudioAlertMs = now;
@@ -144,7 +148,7 @@ void loop() {
   bool helmetWorn = isHelmetWorn();
   bool alcoholDetected = isAlcoholDetected(alcoholRaw);
 
-  handleAudioAlerts(helmetWorn, alcoholDetected);
+  handleAudioAlerts(helmetWorn, alcoholDetected, alcoholRaw);
 
   unsigned long now = millis();
   if (now - lastStatusSendMs >= STATUS_SEND_INTERVAL_MS) {
@@ -154,3 +158,4 @@ void loop() {
 
   delay(25);
 }
+
